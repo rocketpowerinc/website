@@ -3,7 +3,7 @@
   padding: 80px 0;
   text-align: center;
   background-color: #070e16;
-  min-height: 100vh; /* Ensures the page fills the viewport */
+  min-height: 100vh;
 }
 
 .menu h2 {
