@@ -1,7 +1,8 @@
+/* Global Styles */
 * {
   margin: 0;
   padding: 0;
-  font-family: 'Noto Sans', sans-serif;
+  font-family: 'Orbitron', sans-serif;
 }
 
 /* Header */
@@ -20,6 +21,8 @@ header {
 
 nav ul {
   list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 nav ul li {
@@ -38,7 +41,7 @@ nav ul li a:hover {
   color: #ff0000;
 }
 
-/* Hero */
+/* Hero Section */
 .hero {
   background-image: url("hero-background.jpg");
   background-size: cover;
