@@ -160,3 +160,29 @@ nav ul li a:hover {
 .footer-text {
   font-size: 14px;
 }
+
+
+/* Styles specific to the Menu Page */
+.menu {
+  background-color: #fff;
+  padding: 40px;
+}
+
+.menu-content {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.menu-images {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.menu-images img {
+  width: 300px;
+  height: auto;
+  border-radius: 10px;
+}
+
+/* Make sure the rest of the global styles apply only when necessary */
