@@ -5,6 +5,28 @@
   font-family: 'Orbitron', sans-serif;
 }
 
+/* Dark Mode */
+body.dark-theme {
+  background-color: #070e16;
+  color: #fff;
+}
+
+header.dark-theme {
+  background-color: #070e16;
+}
+
+footer.dark-theme {
+  background-color: #070e16;
+}
+
+nav ul li a.dark-theme {
+  color: white;
+}
+
+nav ul li a.dark-theme:hover {
+  color: #ff0000;
+}
+
 /* Header */
 header {
   background-color: #070e16;
@@ -43,7 +65,7 @@ nav ul li a:hover {
 
 /* Hero Section */
 .hero {
-  background-image: url("../images/hero-background.jpg"); /* Corrected path */
+  background-image: url("../images/hero-background.jpg");
   background-size: cover;
   background-position: center;
   height: 100vh;
@@ -86,7 +108,7 @@ nav ul li a:hover {
   box-shadow: 0 0 15px #ff00ff, 0 0 30px #ff00ff;
 }
 
-/* About */
+/* About Section */
 .about {
   display: flex;
   align-items: center;
@@ -120,10 +142,6 @@ nav ul li a:hover {
   max-width: 100%;
   height: auto;
   border-radius: 5px;
-}
-
-.dark-theme {
-  background-color: #070e16;
 }
 
 /* Footer */
@@ -161,7 +179,6 @@ nav ul li a:hover {
   font-size: 14px;
 }
 
-
 /* Styles specific to the Menu Page */
 .menu {
   background-color: #fff;
@@ -182,6 +199,19 @@ nav ul li a:hover {
 .menu-images img {
   width: 300px;
   height: auto;
+  border-radius: 10px;
+}
+
+/* Dark Mode on Menu Page */
+.menu.dark-theme {
+  background-color: #070e16;
+}
+
+.menu.dark-theme .menu-content {
+  color: #fff;
+}
+
+.menu.dark-theme .menu-images img {
   border-radius: 10px;
 }
 
