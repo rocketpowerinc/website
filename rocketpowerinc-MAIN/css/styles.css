@@ -5,28 +5,6 @@
   font-family: 'Orbitron', sans-serif;
 }
 
-/* Dark Mode */
-body.dark-theme {
-  background-color: #070e16;
-  color: #fff;
-}
-
-header.dark-theme {
-  background-color: #070e16;
-}
-
-footer.dark-theme {
-  background-color: #070e16;
-}
-
-nav ul li a.dark-theme {
-  color: white;
-}
-
-nav ul li a.dark-theme:hover {
-  color: #ff0000;
-}
-
 /* Header */
 header {
   background-color: #070e16;
@@ -179,7 +157,7 @@ nav ul li a:hover {
   font-size: 14px;
 }
 
-/* Styles specific to the Menu Page */
+/* Menu Page */
 .menu {
   background-color: #fff;
   padding: 40px;
@@ -202,17 +180,44 @@ nav ul li a:hover {
   border-radius: 10px;
 }
 
-/* Dark Mode on Menu Page */
+/* Dark Mode Styles */
+body.dark-theme {
+  background-color: #070e16;
+  color: #fff;
+}
+
+header.dark-theme {
+  background-color: #070e16;
+}
+
+footer.dark-theme {
+  background-color: #070e16;
+}
+
+nav ul li a.dark-theme {
+  color: white;
+}
+
+nav ul li a.dark-theme:hover {
+  color: #ff0000;
+}
+
+.hero.dark-theme {
+  background-image: url("../images/hero-background.jpg");
+}
+
+.about.dark-theme {
+  background-color: #070e16;
+}
+
+.about-content.dark-theme {
+  color: #fff;
+}
+
 .menu.dark-theme {
   background-color: #070e16;
 }
 
-.menu.dark-theme .menu-content {
+.menu-content.dark-theme {
   color: #fff;
 }
-
-.menu.dark-theme .menu-images img {
-  border-radius: 10px;
-}
-
-/* Make sure the rest of the global styles apply only when necessary */
