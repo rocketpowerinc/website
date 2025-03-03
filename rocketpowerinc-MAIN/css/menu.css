@@ -1,0 +1,43 @@
+/* Menu Page */
+.menu {
+  padding: 80px 0;
+  text-align: center;
+  background-color: #070e16;
+  min-height: 100vh; /* Ensures the page fills the viewport */
+}
+
+.menu h2 {
+  font-size: 36px;
+  margin-bottom: 40px;
+  color: #ffffff;
+}
+
+.menu-items {
+  display: flex;
+  justify-content: center;
+}
+
+.menu-item {
+  max-width: 300px;
+  margin: 0 20px;
+  text-align: left;
+}
+
+.menu-item img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.menu-item h3 {
+  font-size: 24px;
+  margin-bottom: 10px;
+  color: #ffffff;
+}
+
+.menu-item p {
+  font-size: 16px;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
