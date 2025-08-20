@@ -11,7 +11,7 @@ $NetCmd = if ($IsWindows) { "ipconfig" } else { "ifconfig" }
 
 # Map button "actions" -> commands to run (edit these!)
 $AllowList = @{
-  "say-hello" = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "'Hello from PowerShell'") }
+  "say-hello" = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "'PWR-COMMAND SYSTEM v1.0`n`nThis is a secure local web-based command execution interface developed by RocketPowerInc.`n`nFeatures:`n- Cyberpunk-themed UI with real-time command execution`n- Whitelisted command system for security`n- Local-only access (127.0.0.1) to prevent external threats`n- Bearer token authentication`n- Self-contained PowerShell script with embedded HTML/CSS/JS`n`nUse the buttons above to execute predefined system commands safely.`nAll commands run in a controlled environment with output displayed in this terminal.`n`nDeveloped for local system administration and monitoring tasks.'") }
   "list-home" = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Get-ChildItem ~ | Select-Object Name,Length | Format-Table -Auto | Out-String") }
   "ipconfig"  = @{ File = $NetCmd; Args = @() }
   "go-pwr"    = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Start-Process pwsh -ArgumentList '-NoExit', '-Command', '& `$env:USERPROFILE\go\bin\go-pwr.exe'; 'Running Go-PWR in new terminal window...'") }
@@ -30,7 +30,7 @@ $html = @"
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>◢ CYBER COMMAND TERMINAL ◤</title>
+<title>◢ PWR-COMMAND TERMINAL ◤</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
@@ -284,8 +284,8 @@ body {
 </head>
 <body>
 <div class="container">
-  <h1 class="glitch" data-text="◢ CYBER COMMAND ◤">◢ CYBER COMMAND ◤</h1>
-  <p class="subtitle">◢ SECURE LOCAL EXECUTION PROTOCOL ◤</p>
+  <h1 class="glitch" data-text="◢ PWR-COMMAND ◤">◢ PWR-COMMAND ◤</h1>
+  <p class="subtitle">◢ SECURE LOCAL COMMAND EXECUTIONS ◤</p>
   
   <div class="cyber-line"></div>
   
@@ -315,17 +315,11 @@ body {
 > Status: STANDBY</div>
 </div>
 
-<div class="status" id="status">◢ READY ◤</div>
-
 <script>
 const TOKEN = "$Token";
 
 async function run(action){
   const out = document.getElementById("out");
-  const status = document.getElementById("status");
-  
-  status.textContent = "◢ EXECUTING ◤";
-  status.classList.add("loading");
   
   out.textContent = "◢ INITIALIZING " + action.toUpperCase() + " PROTOCOL ◤\n\n> Establishing connection...\n> Authenticating...\n> Executing command...\n\n";
   
@@ -337,28 +331,17 @@ async function run(action){
     });
     const t = await r.text();
     out.textContent = "◢ " + action.toUpperCase() + " PROTOCOL COMPLETE ◤\n\n" + t + "\n\n◢ END TRANSMISSION ◤";
-    status.textContent = "◢ COMPLETE ◤";
   }catch(e){
     out.textContent = "◢ ERROR PROTOCOL ◤\n\n> SYSTEM FAULT: " + e + "\n\n◢ END TRANSMISSION ◤";
-    status.textContent = "◢ ERROR ◤";
   }
-  
-  status.classList.remove("loading");
-  setTimeout(() => {
-    status.textContent = "◢ READY ◤";
-  }, 2000);
 }
 
 async function exitServer(){
   const out = document.getElementById("out");
-  const status = document.getElementById("status");
   
   if(!confirm("◢ CONFIRM SERVER SHUTDOWN ◤\n\nThis will terminate the command server. Continue?")){
     return;
   }
-  
-  status.textContent = "◢ SHUTTING DOWN ◤";
-  status.classList.add("loading");
   
   out.textContent = "◢ SHUTDOWN PROTOCOL INITIATED ◤\n\n> Terminating connections...\n> Shutting down server...\n> Goodbye!\n\n◢ SERVER OFFLINE ◤";
   
@@ -372,7 +355,6 @@ async function exitServer(){
     // Expected - server will close connection
   }
   
-  status.textContent = "◢ OFFLINE ◤";
   document.body.style.opacity = "0.5";
   setTimeout(() => {
     window.close();
