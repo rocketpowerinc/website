@@ -11,10 +11,10 @@ $NetCmd = if ($IsWindows) { "ipconfig" } else { "ifconfig" }
 
 # Map button "actions" -> commands to run (edit these!)
 $AllowList = @{
-  "say-hello" = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "'PWR-COMMAND SYSTEM v1.0`n`nThis is a secure local web-based command execution interface developed by RocketPowerInc.`n`nFeatures:`n- Dynamic theme switching capabilities (Modern Dark, Modern Light, Cyberpunk, Doomsday, Kids Boy, Kids Girl)`n- Real-time command execution with themed output`n- Whitelisted command system for security`n- Local-only access (127.0.0.1) to prevent external threats`n- Bearer token authentication`n- Self-contained PowerShell script with embedded HTML/CSS/JS`n`nUse the THEMES button (bottom-left) to switch between visual modes.`nUse the buttons above to execute predefined system commands safely.`nAll commands run in a controlled environment with output displayed in this terminal.`n`nDeveloped for local system administration and monitoring tasks.'") }
-  "list-home" = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Get-ChildItem ~ | Select-Object Name,Length | Format-Table -Auto | Out-String") }
-  "ipconfig"  = @{ File = $NetCmd; Args = @() }
-  "go-pwr"    = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Start-Process pwsh -ArgumentList '-NoExit', '-Command', '& `$env:USERPROFILE\go\bin\go-pwr.exe'; 'Running Go-PWR in new terminal window...'") }
+  "say-hello"   = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "'PWR-COMMAND SYSTEM v1.0`n`nThis is a secure local web-based command execution interface developed by RocketPowerInc.`n`nFeatures:`n- Dynamic theme switching capabilities (Modern Dark, Modern Light, Cyberpunk, Doomsday, Kids Boy, Kids Girl)`n- Real-time command execution with themed output`n- Whitelisted command system for security`n- Local-only access (127.0.0.1) to prevent external threats`n- Bearer token authentication`n- Self-contained PowerShell script with embedded HTML/CSS/JS`n`nUse the THEMES button (bottom-left) to switch between visual modes.`nUse the buttons above to execute predefined system commands safely.`nAll commands run in a controlled environment with output displayed in this terminal.`n`nDeveloped for local system administration and monitoring tasks.'") }
+  "list-home"   = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Get-ChildItem ~ | Select-Object Name,Length | Format-Table -Auto | Out-String") }
+  "ipconfig"    = @{ File = $NetCmd; Args = @() }
+  "go-pwr"      = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Start-Process pwsh -ArgumentList '-NoExit', '-Command', '& `$env:USERPROFILE\go\bin\go-pwr.exe'; 'Running Go-PWR in new terminal window...'") }
   "exit-server" = @{ File = "internal"; Args = @() }  # Special internal command to stop server
 }
 
