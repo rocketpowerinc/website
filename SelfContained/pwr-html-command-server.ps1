@@ -15,43 +15,320 @@ $AllowList = @{
   "list-home" = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Get-ChildItem ~ | Select-Object Name,Length | Format-Table -Auto | Out-String") }
   "ipconfig"  = @{ File = $NetCmd; Args = @() }
   "go-pwr"    = @{ File = "pwsh"; Args = @("-NoLogo", "-NoProfile", "-Command", "Start-Process pwsh -ArgumentList '-NoExit', '-Command', '& `$env:USERPROFILE\go\bin\go-pwr.exe'; 'Running Go-PWR in new terminal window...'") }
+  "exit-server" = @{ File = "internal"; Args = @() }  # Special internal command to stop server
 }
 
 # --- tiny HTTP server ---
-Add-Type -AssemblyName System.Net.HttpListener
+Add-Type -AssemblyName System.Net
 $listener = [System.Net.HttpListener]::new()
 $prefix = "http://$BindAddress`:$Port/"
 $listener.Prefixes.Add($prefix)
 
-# Simple HTML UI (buttons call /run via fetch)
+# Cyberpunk-themed HTML UI (buttons call /run via fetch)
 $html = @"
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Local Command Panel</title>
+<title>◢ CYBER COMMAND TERMINAL ◤</title>
 <style>
- body{font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;margin:2rem;max-width:900px}
- button{padding:.6rem 1rem;margin:.3rem;cursor:pointer}
- pre{background:#111;color:#eee;padding:1rem;overflow:auto;max-height:50vh}
- .row{margin:.6rem 0}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --neon-cyan: #00ffff;
+  --neon-pink: #ff0080;
+  --neon-purple: #8000ff;
+  --neon-green: #00ff41;
+  --dark-bg: #0a0a0a;
+  --darker-bg: #050505;
+  --grid-color: #1a1a2e;
+}
+
+body {
+  font-family: 'Orbitron', monospace;
+  background: var(--dark-bg);
+  color: var(--neon-cyan);
+  min-height: 100vh;
+  background-image: 
+    linear-gradient(rgba(0,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,255,0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  animation: grid-move 20s linear infinite;
+  overflow-x: hidden;
+}
+
+@keyframes grid-move {
+  0% { background-position: 0 0; }
+  100% { background-position: 20px 20px; }
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  position: relative;
+}
+
+.glitch {
+  position: relative;
+  font-size: 3rem;
+  font-weight: 900;
+  text-align: center;
+  margin-bottom: 1rem;
+  text-shadow: 
+    0 0 5px var(--neon-cyan),
+    0 0 10px var(--neon-cyan),
+    0 0 15px var(--neon-cyan);
+}
+
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch::before {
+  animation: glitch-anim 2s infinite linear alternate-reverse;
+  color: var(--neon-pink);
+  z-index: -1;
+}
+
+.glitch::after {
+  animation: glitch-anim2 1s infinite linear alternate-reverse;
+  color: var(--neon-purple);
+  z-index: -2;
+}
+
+@keyframes glitch-anim {
+  0% { clip: rect(31px, 9999px, 94px, 0); }
+  20% { clip: rect(70px, 9999px, 36px, 0); }
+  40% { clip: rect(43px, 9999px, 1px, 0); }
+  60% { clip: rect(5px, 9999px, 90px, 0); }
+  80% { clip: rect(79px, 9999px, 65px, 0); }
+  100% { clip: rect(31px, 9999px, 94px, 0); }
+}
+
+@keyframes glitch-anim2 {
+  0% { clip: rect(26px, 9999px, 99px, 0); }
+  20% { clip: rect(85px, 9999px, 15px, 0); }
+  40% { clip: rect(91px, 9999px, 46px, 0); }
+  60% { clip: rect(6px, 9999px, 88px, 0); }
+  80% { clip: rect(95px, 9999px, 2px, 0); }
+  100% { clip: rect(26px, 9999px, 99px, 0); }
+}
+
+.subtitle {
+  text-align: center;
+  font-size: 1.2rem;
+  margin-bottom: 3rem;
+  color: var(--neon-green);
+  text-shadow: 0 0 10px var(--neon-green);
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.cmd-button {
+  background: linear-gradient(45deg, var(--darker-bg), var(--dark-bg));
+  border: 2px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  padding: 1.5rem;
+  font-family: 'Orbitron', monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.cmd-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,255,0.2), transparent);
+  transition: left 0.5s;
+}
+
+.cmd-button:hover {
+  border-color: var(--neon-pink);
+  color: var(--neon-pink);
+  box-shadow: 
+    0 0 20px var(--neon-pink),
+    inset 0 0 20px rgba(255,0,128,0.1);
+  transform: translateY(-2px);
+}
+
+.cmd-button:hover::before {
+  left: 100%;
+}
+
+.cmd-button:active {
+  transform: translateY(0);
+  box-shadow: 
+    0 0 10px var(--neon-pink),
+    inset 0 0 10px rgba(255,0,128,0.2);
+}
+
+.exit-btn {
+  border-color: var(--neon-pink) !important;
+  color: var(--neon-pink) !important;
+}
+
+.exit-btn:hover {
+  border-color: #ff4444 !important;
+  color: #ff4444 !important;
+  box-shadow: 
+    0 0 20px #ff4444,
+    inset 0 0 20px rgba(255,68,68,0.1);
+}
+
+.terminal {
+  background: var(--darker-bg);
+  border: 2px solid var(--neon-green);
+  border-radius: 8px;
+  padding: 1.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: var(--neon-green);
+  min-height: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  position: relative;
+  box-shadow: 
+    0 0 20px rgba(0,255,65,0.3),
+    inset 0 0 20px rgba(0,255,65,0.05);
+}
+
+.terminal::before {
+  content: '◢ TERMINAL OUTPUT ◤';
+  position: absolute;
+  top: -12px;
+  left: 20px;
+  background: var(--darker-bg);
+  padding: 0 10px;
+  color: var(--neon-green);
+  font-family: 'Orbitron', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.terminal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal::-webkit-scrollbar-track {
+  background: var(--darker-bg);
+}
+
+.terminal::-webkit-scrollbar-thumb {
+  background: var(--neon-green);
+  border-radius: 4px;
+}
+
+.status {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid var(--neon-cyan);
+  padding: 0.5rem 1rem;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.8rem;
+  color: var(--neon-cyan);
+  border-radius: 4px;
+}
+
+.loading {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.cyber-line {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+  margin: 2rem 0;
+  animation: scan 3s infinite;
+}
+
+@keyframes scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
 </style>
 </head>
 <body>
-<h2>Local Command Panel</h2>
-<p>These buttons run predefined, safe commands on <code>localhost</code>.</p>
-<div class="row">
-  <button onclick="run('say-hello')">Say Hello</button>
-  <button onclick="run('list-home')">List Home</button>
-  <button onclick="run('ipconfig')">IP Config</button>
-  <button onclick="run('go-pwr')">Go PWR</button>
+<div class="container">
+  <h1 class="glitch" data-text="◢ CYBER COMMAND ◤">◢ CYBER COMMAND ◤</h1>
+  <p class="subtitle">◢ SECURE LOCAL EXECUTION PROTOCOL ◤</p>
+  
+  <div class="cyber-line"></div>
+  
+  <div class="command-grid">
+    <button class="cmd-button" onclick="run('say-hello')">
+      ◢ HELLO PROTOCOL ◤
+    </button>
+    <button class="cmd-button" onclick="run('list-home')">
+      ◢ HOME DIRECTORY ◤
+    </button>
+    <button class="cmd-button" onclick="run('ipconfig')">
+      ◢ NETWORK STATUS ◤
+    </button>
+    <button class="cmd-button" onclick="run('go-pwr')">
+      ◢ LAUNCH GO-PWR ◤
+    </button>
+    <button class="cmd-button exit-btn" onclick="exitServer()">
+      ◢ SHUTDOWN SERVER ◤
+    </button>
+  </div>
+  
+  <div class="terminal" id="out">◢ AWAITING COMMAND EXECUTION ◤
+  
+> System Ready
+> Authentication: VERIFIED
+> Commands: LOADED
+> Status: STANDBY</div>
 </div>
-<pre id="out">Click a button…</pre>
+
+<div class="status" id="status">◢ READY ◤</div>
+
 <script>
 const TOKEN = "$Token";
+
 async function run(action){
   const out = document.getElementById("out");
-  out.textContent = "Running " + action + "…";
+  const status = document.getElementById("status");
+  
+  status.textContent = "◢ EXECUTING ◤";
+  status.classList.add("loading");
+  
+  out.textContent = "◢ INITIALIZING " + action.toUpperCase() + " PROTOCOL ◤\n\n> Establishing connection...\n> Authenticating...\n> Executing command...\n\n";
+  
   try{
     const r = await fetch("/run", {
       method:"POST",
@@ -59,10 +336,47 @@ async function run(action){
       body: JSON.stringify({action})
     });
     const t = await r.text();
-    out.textContent = t;
+    out.textContent = "◢ " + action.toUpperCase() + " PROTOCOL COMPLETE ◤\n\n" + t + "\n\n◢ END TRANSMISSION ◤";
+    status.textContent = "◢ COMPLETE ◤";
   }catch(e){
-    out.textContent = "Error: " + e;
+    out.textContent = "◢ ERROR PROTOCOL ◤\n\n> SYSTEM FAULT: " + e + "\n\n◢ END TRANSMISSION ◤";
+    status.textContent = "◢ ERROR ◤";
   }
+  
+  status.classList.remove("loading");
+  setTimeout(() => {
+    status.textContent = "◢ READY ◤";
+  }, 2000);
+}
+
+async function exitServer(){
+  const out = document.getElementById("out");
+  const status = document.getElementById("status");
+  
+  if(!confirm("◢ CONFIRM SERVER SHUTDOWN ◤\n\nThis will terminate the command server. Continue?")){
+    return;
+  }
+  
+  status.textContent = "◢ SHUTTING DOWN ◤";
+  status.classList.add("loading");
+  
+  out.textContent = "◢ SHUTDOWN PROTOCOL INITIATED ◤\n\n> Terminating connections...\n> Shutting down server...\n> Goodbye!\n\n◢ SERVER OFFLINE ◤";
+  
+  try{
+    await fetch("/run", {
+      method:"POST",
+      headers: {"Content-Type":"application/json","Authorization":"Bearer "+TOKEN},
+      body: JSON.stringify({action: "exit-server"})
+    });
+  }catch(e){
+    // Expected - server will close connection
+  }
+  
+  status.textContent = "◢ OFFLINE ◤";
+  document.body.style.opacity = "0.5";
+  setTimeout(() => {
+    window.close();
+  }, 2000);
 }
 </script>
 </body>
@@ -101,10 +415,26 @@ catch {
 
 Write-Host ("Open {0}  (token: {1})" -f $prefix, $Token) -ForegroundColor Green
 
-# Router loop
+# Auto-open browser
 try {
-  while ($listener.IsListening) {
-    $ctx = $listener.GetContext()
+  Start-Process $prefix
+  Write-Host "Browser opened automatically" -ForegroundColor Cyan
+}
+catch {
+  Write-Host "Could not auto-open browser. Please navigate to $prefix manually" -ForegroundColor Yellow
+}
+
+# Router loop
+$shouldExit = $false
+try {
+  while ($listener.IsListening -and -not $shouldExit) {
+    try {
+      $ctx = $listener.GetContext()
+    }
+    catch {
+      # Listener was stopped, exit gracefully
+      break
+    }
 
     # CORS/Preflight (simple)
     if ($ctx.Request.HttpMethod -eq "OPTIONS") {
@@ -136,6 +466,14 @@ try {
         if (-not $action -or -not $AllowList.ContainsKey($action)) {
           Write-Host "DEBUG: Received action='$action', raw='$raw'" -ForegroundColor Yellow
           Write-Response $ctx 400 "Unknown or missing action: '$action'" ; continue
+        }
+
+        # Handle special exit command
+        if ($action -eq "exit-server") {
+          Write-Response $ctx 200 "Server shutdown initiated..."
+          Write-Host "Exit command received - shutting down server" -ForegroundColor Yellow
+          $shouldExit = $true
+          break  # Exit the main loop
         }
 
         $cmd = $AllowList[$action]
@@ -171,3 +509,5 @@ finally {
   }
   try { $listener.Close() } catch {}
 }
+
+Write-Host "Server stopped. Exiting..." -ForegroundColor Green
