@@ -779,6 +779,18 @@ func isValidPath(requestedPath string) bool {
     return !strings.HasPrefix(rel, "..")
 }
 
+// Check if file/directory is hidden
+func isHidden(name string) bool {
+    // Unix-like systems: files/directories starting with . are hidden
+    if strings.HasPrefix(name, ".") {
+        return true
+    }
+    
+    // Windows-specific hidden attribute check would go here
+    // For now, we'll rely on the dot prefix check which works cross-platform
+    return false
+}
+
 // Get directory contents (folders and videos)
 func getDirectoryContents(dirPath string) ([]FolderInfo, []VideoInfo, error) {
     var folders []FolderInfo
@@ -795,6 +807,11 @@ func getDirectoryContents(dirPath string) ([]FolderInfo, []VideoInfo, error) {
     }
     
     for _, entry := range entries {
+        // Skip hidden files and directories
+        if isHidden(entry.Name()) {
+            continue
+        }
+        
         if entry.IsDir() {
             // Add folder
             folders = append(folders, FolderInfo{
