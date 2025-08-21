@@ -100,12 +100,85 @@ const htmlTemplate = `
             word-break: break-word;
         }
         
+        .video-container {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        
         .video-player {
             width: 100%;
             height: 250px;
             border-radius: 10px;
-            margin-bottom: 15px;
             background: #000;
+        }
+        
+        .play-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .play-overlay:hover {
+            background: rgba(0, 0, 0, 0.4);
+        }
+        
+        .play-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .play-button {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .play-button:hover {
+            transform: scale(1.1);
+            border-color: rgba(255, 255, 255, 0.6);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4);
+        }
+        
+        .play-icon {
+            width: 0;
+            height: 0;
+            border-left: 25px solid white;
+            border-top: 15px solid transparent;
+            border-bottom: 15px solid transparent;
+            margin-left: 8px;
+        }
+        
+        .video-title {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+            max-width: calc(100% - 30px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .video-info {
@@ -174,10 +247,21 @@ const htmlTemplate = `
                 {{range .Videos}}
                 <div class="video-card">
                     <h3>{{.Name}}</h3>
-                    <video class="video-player" controls preload="metadata">
-                        <source src="/video/{{.Name}}" type="{{.MimeType}}">
-                        Your browser does not support the video tag.
-                    </video>
+                    <div class="video-container">
+                        <video class="video-player" preload="metadata" poster="" muted="false" volume="1.0">
+                            <source src="/video/{{.Name}}" type="{{.MimeType}}">
+                            <!-- Fallback sources for better browser compatibility -->
+                            <source src="/video/{{.Name}}" type="video/mp4">
+                            <source src="/video/{{.Name}}" type="video/webm">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="play-overlay" onclick="playVideo(this)">
+                            <div class="play-button">
+                                <div class="play-icon"></div>
+                            </div>
+                        </div>
+                        <div class="video-title">{{.Name}}</div>
+                    </div>
                     <div class="video-info">
                         <span class="file-size">{{formatFileSize .Size}}</span>
                         <a href="/download/{{.Name}}" class="download-btn">📥 Download</a>
@@ -193,6 +277,95 @@ const htmlTemplate = `
             </div>
         {{end}}
     </div>
+    
+    <script>
+        function playVideo(overlay) {
+            const videoContainer = overlay.parentElement;
+            const video = videoContainer.querySelector('video');
+            
+            // Ensure audio is enabled
+            video.muted = false;
+            video.volume = 1.0;
+            
+            // Hide the overlay
+            overlay.classList.add('hidden');
+            
+            // Add controls to the video and play it
+            video.setAttribute('controls', 'controls');
+            
+            // Try to play the video
+            const playPromise = video.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(function() {
+                    // Playback started successfully
+                    console.log('Video playback started');
+                }).catch(function(error) {
+                    console.log('Playback failed:', error);
+                    // Show overlay again if playback fails
+                    overlay.classList.remove('hidden');
+                    
+                    // Try with muted audio as fallback (some browsers require this)
+                    video.muted = true;
+                    video.play().then(function() {
+                        console.log('Video started muted - click to unmute');
+                        // Add a click listener to unmute
+                        video.addEventListener('click', function() {
+                            video.muted = false;
+                        }, { once: true });
+                    }).catch(function(mutedError) {
+                        console.log('Even muted playback failed:', mutedError);
+                    });
+                });
+            }
+            
+            // Listen for when video is paused or ended to show overlay again
+            video.addEventListener('pause', function() {
+                if (video.currentTime === 0 || video.ended) {
+                    overlay.classList.remove('hidden');
+                    video.removeAttribute('controls');
+                }
+            });
+            
+            video.addEventListener('ended', function() {
+                overlay.classList.remove('hidden');
+                video.removeAttribute('controls');
+                video.currentTime = 0;
+            });
+            
+            // Ensure audio tracks are enabled for MKV files
+            video.addEventListener('loadedmetadata', function() {
+                // Enable all audio tracks
+                if (video.audioTracks) {
+                    for (let i = 0; i < video.audioTracks.length; i++) {
+                        video.audioTracks[i].enabled = true;
+                    }
+                }
+            });
+        }
+        
+        // Optional: Add keyboard support for play buttons
+        document.addEventListener('keydown', function(e) {
+            if (e.code === 'Space') {
+                const activeElement = document.activeElement;
+                if (activeElement.classList.contains('play-overlay')) {
+                    e.preventDefault();
+                    playVideo(activeElement);
+                }
+            }
+        });
+        
+        // Add global audio context unlock for mobile browsers
+        document.addEventListener('DOMContentLoaded', function() {
+            // This helps with audio playback on mobile devices
+            document.addEventListener('touchstart', function() {
+                const videos = document.querySelectorAll('video');
+                videos.forEach(video => {
+                    video.load(); // Reload video to ensure audio context
+                });
+            }, { once: true });
+        });
+    </script>
 </body>
 </html>
 `
@@ -217,6 +390,12 @@ func getMimeType(filename string) string {
         return "video/x-flv"
     case ".mkv":
         return "video/x-matroska"
+    case ".m4v":
+        return "video/mp4"
+    case ".3gp":
+        return "video/3gpp"
+    case ".ts":
+        return "video/mp2t"
     default:
         return "video/mp4" // Default fallback
     }
@@ -225,7 +404,7 @@ func getMimeType(filename string) string {
 // Check if file is a video based on extension
 func isVideoFile(filename string) bool {
     ext := strings.ToLower(filepath.Ext(filename))
-    videoExts := []string{".mp4", ".webm", ".ogg", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".m4v", ".3gp"}
+    videoExts := []string{".mp4", ".webm", ".ogg", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".m4v", ".3gp", ".ts"}
     for _, videoExt := range videoExts {
         if ext == videoExt {
             return true
@@ -311,9 +490,19 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
     
     videoPath := filepath.Join(videoDir, filename)
     
-    // Set appropriate headers for video streaming
-    w.Header().Set("Content-Type", getMimeType(filename))
+    // Set appropriate headers for video streaming with audio support
+    mimeType := getMimeType(filename)
+    w.Header().Set("Content-Type", mimeType)
     w.Header().Set("Accept-Ranges", "bytes")
+    w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+    w.Header().Set("Pragma", "no-cache")
+    w.Header().Set("Expires", "0")
+    
+    // Special headers for MKV files to ensure proper codec support
+    if strings.HasSuffix(strings.ToLower(filename), ".mkv") {
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.Header().Set("Content-Type", "video/x-matroska")
+    }
     
     http.ServeFile(w, r, videoPath)
 }
