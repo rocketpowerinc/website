@@ -5,6 +5,7 @@ import (
     "fmt"
     "html/template"
     "log"
+    "net"
     "net/http"
     "os"
     "os/signal"
@@ -18,6 +19,49 @@ const baseVideoDir = `D:\Next New HDD\PrepperOS-Data-Master`
 
 // Global shutdown channel
 var shutdownChan = make(chan bool, 1)
+
+// Get local IP address for network access
+func getLocalIP() string {
+    // Get all network interfaces
+    interfaces, err := net.Interfaces()
+    if err != nil {
+        return "192.168.1.2" // Fallback to your known IP
+    }
+    
+    for _, iface := range interfaces {
+        // Skip loopback and down interfaces
+        if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+            continue
+        }
+        
+        addrs, err := iface.Addrs()
+        if err != nil {
+            continue
+        }
+        
+        for _, addr := range addrs {
+            if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+                if ipnet.IP.To4() != nil {
+                    ip := ipnet.IP.String()
+                    // Prefer 192.168.x.x addresses (typical home network)
+                    if strings.HasPrefix(ip, "192.168.") {
+                        return ip
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback to original method if no 192.168.x.x found
+    conn, err := net.Dial("udp", "8.8.8.8:80")
+    if err != nil {
+        return "192.168.1.2" // Your known IP as final fallback
+    }
+    defer conn.Close()
+    
+    localAddr := conn.LocalAddr().(*net.UDPAddr)
+    return localAddr.IP.String()
+}
 
 type PageData struct {
     Title       string
@@ -472,6 +516,24 @@ const htmlTemplate = `
             .container {
                 margin-top: 20px;
             }
+
+            /* Hide stop server button on mobile devices */
+            .stop-server {
+                display: none;
+            }
+        }
+
+        /* Additional media query for smaller mobile devices */
+        @media (max-width: 480px) {
+            .stop-server {
+                display: none !important;
+            }
+            
+            .theme-button {
+                padding: 6px 8px;
+                font-size: 0.8rem;
+                margin: 1px;
+            }
         }
 
         /* Nuclear theme specific animations */
@@ -903,7 +965,7 @@ func main() {
     
     // Create server
     server := &http.Server{
-        Addr: ":8080",
+        Addr: ":3015", // Changed to port 3015 to avoid conflict
     }
     
     // Channel to listen for interrupt signal
@@ -912,9 +974,12 @@ func main() {
     
     // Start server in a goroutine
     go func() {
+        localIP := getLocalIP()
         fmt.Printf("🎬 Video Gallery Server starting...\n")
         fmt.Printf("📁 Base directory: %s\n", baseVideoDir)
-        fmt.Printf("🌐 Open your browser to: http://localhost:8080\n")
+        fmt.Printf("🌐 Local access: http://localhost:3015\n")
+        fmt.Printf("🏠 Network access: http://%s:3015\n", localIP)
+        fmt.Printf("📱 Mobile/Other devices: http://%s:3015\n", localIP)
         fmt.Printf("⏹️  Press Ctrl+C or use the Stop Server button to stop\n\n")
         
         if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
