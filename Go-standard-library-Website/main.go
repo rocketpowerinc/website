@@ -3,20 +3,26 @@ package main
 import (
     "fmt"
     "html/template"
-    "io/fs"
     "log"
     "net/http"
-    "net/url"
     "os"
     "path/filepath"
     "strings"
 )
 
-const videoDir = `C:\Users\rocket\Downloads\Test`
+const baseVideoDir = `D:\Next New HDD\PrepperOS-Data-Master`
 
 type PageData struct {
-    Title  string
-    Videos []VideoInfo
+    Title       string
+    CurrentPath string
+    ParentPath  string
+    Folders     []FolderInfo
+    Videos      []VideoInfo
+}
+
+type FolderInfo struct {
+    Name string
+    Path string
 }
 
 type VideoInfo struct {
@@ -69,30 +75,62 @@ const htmlTemplate = `
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
         
-        .header p {
-            font-size: 1.2rem;
-            opacity: 0.9;
+        .breadcrumb {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 1.1rem;
         }
         
-        .video-grid {
+        .breadcrumb a {
+            color: #81c784;
+            text-decoration: none;
+            margin-right: 5px;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .content-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
             margin-top: 30px;
         }
         
-        .video-card {
+        .folder-card, .video-card {
             background: rgba(255, 255, 255, 0.15);
             border-radius: 20px;
             padding: 20px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
         }
         
-        .video-card:hover {
+        .folder-card:hover, .video-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .folder-card {
+            text-align: center;
+            background: rgba(255, 193, 7, 0.2);
+            border-color: rgba(255, 193, 7, 0.4);
+        }
+        
+        .folder-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+        
+        .folder-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            word-break: break-word;
         }
         
         .video-card h3 {
@@ -107,157 +145,11 @@ const htmlTemplate = `
             margin-bottom: 15px;
         }
         
-        /* Custom video progress indicator for better visibility */
-        .video-progress-overlay {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            right: 10px;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-            z-index: 10;
-            cursor: pointer;
-        }
-        
-        .video-progress-overlay.visible {
-            opacity: 1;
-            pointer-events: all;
-        }
-        
-        .video-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            border-radius: 3px;
-            width: 0%;
-            transition: width 0.1s ease;
-            position: relative;
-        }
-        
-        .video-scrubber-handle {
-            position: absolute;
-            top: -6px;
-            right: -8px;
-            width: 16px;
-            height: 16px;
-            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
-            border: 2px solid white;
-            border-radius: 50%;
-            cursor: grab;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-            transition: all 0.2s ease;
-            z-index: 20;
-        }
-        
-        .video-scrubber-handle:hover {
-            transform: scale(1.2);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-        
-        .video-scrubber-handle:active,
-        .video-scrubber-handle.dragging {
-            cursor: grabbing;
-            transform: scale(1.3);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
-        }
-        
-        .video-time-tooltip {
-            position: absolute;
-            bottom: 25px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-            pointer-events: none;
-            z-index: 25;
-        }
-        
-        .video-time-tooltip.visible {
-            opacity: 1;
-        }
-        
-        .video-container:hover .video-progress-overlay {
-            opacity: 1;
-            pointer-events: all;
-        }
-        
         .video-player {
             width: 100%;
             height: 250px;
             border-radius: 10px;
             background: #000;
-        }
-        
-        /* Enhanced video controls styling */
-        .video-player::-webkit-media-controls {
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 0 0 10px 10px;
-        }
-        
-        .video-player::-webkit-media-controls-panel {
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7));
-            border-radius: 0 0 10px 10px;
-            height: 50px;
-        }
-        
-        .video-player::-webkit-media-controls-timeline {
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 25px;
-            margin-left: 10px;
-            margin-right: 10px;
-            height: 8px;
-        }
-        
-        .video-player::-webkit-media-controls-time-remaining-display,
-        .video-player::-webkit-media-controls-current-time-display {
-            color: white;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-            font-size: 14px;
-            font-weight: bold;
-        }
-        
-        .video-player::-webkit-media-controls-play-button,
-        .video-player::-webkit-media-controls-mute-button,
-        .video-player::-webkit-media-controls-fullscreen-button {
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 50%;
-            margin: 5px;
-        }
-        
-        .video-player::-webkit-media-controls-play-button:hover,
-        .video-player::-webkit-media-controls-mute-button:hover,
-        .video-player::-webkit-media-controls-fullscreen-button:hover {
-            background-color: white;
-            transform: scale(1.1);
-        }
-        
-        .video-player::-webkit-media-controls-volume-slider {
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 25px;
-            height: 6px;
-        }
-        
-        /* Firefox video controls */
-        .video-player::-moz-video-controls {
-            background: rgba(0, 0, 0, 0.8);
-        }
-        
-        /* General video control enhancements */
-        .video-player {
-            outline: none;
-        }
-        
-        .video-player:focus {
-            box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.5);
         }
         
         .play-overlay {
@@ -313,22 +205,6 @@ const htmlTemplate = `
             margin-left: 8px;
         }
         
-        .video-title {
-            position: absolute;
-            bottom: 15px;
-            left: 15px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.9rem;
-            backdrop-filter: blur(10px);
-            max-width: calc(100% - 30px);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
         .video-info {
             display: flex;
             justify-content: space-between;
@@ -353,7 +229,7 @@ const htmlTemplate = `
             transform: scale(1.05);
         }
         
-        .no-videos {
+        .no-content {
             text-align: center;
             padding: 60px;
             background: rgba(255, 255, 255, 0.1);
@@ -361,7 +237,7 @@ const htmlTemplate = `
             margin-top: 40px;
         }
         
-        .no-videos h2 {
+        .no-content h2 {
             font-size: 2rem;
             margin-bottom: 15px;
             color: #ffeb3b;
@@ -373,7 +249,7 @@ const htmlTemplate = `
         }
         
         @media (max-width: 768px) {
-            .video-grid {
+            .content-grid {
                 grid-template-columns: 1fr;
             }
             
@@ -387,97 +263,71 @@ const htmlTemplate = `
     <div class="container">
         <div class="header">
             <h1>🎬 {{.Title}}</h1>
-            <p>Your Personal Video Gallery</p>
+            <p>Directory Browser & Video Gallery</p>
         </div>
         
-        {{if .Videos}}
-            <div class="video-grid">
+        <div class="breadcrumb">
+            📁 Current: {{.CurrentPath}}
+            {{if .ParentPath}}
+                <a href="/?path={{.ParentPath}}">&larr; Back to Parent</a>
+            {{end}}
+        </div>
+        
+        {{if or .Folders .Videos}}
+            <div class="content-grid">
+                {{range .Folders}}
+                <div class="folder-card" onclick="navigateToFolder('{{.Path}}')">
+                    <span class="folder-icon">📁</span>
+                    <div class="folder-name">{{.Name}}</div>
+                </div>
+                {{end}}
+                
                 {{range .Videos}}
                 <div class="video-card">
                     <h3>{{.Name}}</h3>
                     <div class="video-container">
-                        <video class="video-player" preload="none" poster="" muted="false" volume="1.0">
-                            <source src="/video/{{.Name}}" type="{{.MimeType}}">
+                        <video class="video-player" preload="none">
+                            <source src="/video?path={{.Path}}" type="{{.MimeType}}">
                             <p>Your browser does not support this video format. 
-                               <a href="/download/{{.Name}}" class="download-btn">📥 Download</a> to play locally.</p>
+                               <a href="/download?path={{.Path}}" class="download-btn">📥 Download</a> to play locally.</p>
                         </video>
-                        <div class="video-progress-overlay">
-                            <div class="video-progress-bar">
-                                <div class="video-scrubber-handle"></div>
-                            </div>
-                            <div class="video-time-tooltip"></div>
-                        </div>
                         <div class="play-overlay" onclick="playVideo(this)">
                             <div class="play-button">
                                 <div class="play-icon"></div>
                             </div>
                         </div>
-                        <div class="video-title">{{.Name}}</div>
                     </div>
                     <div class="video-info">
                         <span class="file-size">{{formatFileSize .Size}}</span>
-                        <a href="/download/{{.Name}}" class="download-btn">📥 Download</a>
+                        <a href="/download?path={{.Path}}" class="download-btn">📥 Download</a>
                     </div>
                 </div>
                 {{end}}
             </div>
         {{else}}
-            <div class="no-videos">
-                <h2>📁 No Videos Found</h2>
-                <p>Add some video files to the directory to see them here!</p>
-                <p><small>Looking in: {{.VideoDir}}</small></p>
+            <div class="no-content">
+                <h2>📁 Empty Directory</h2>
+                <p>No folders or videos found in this directory.</p>
             </div>
         {{end}}
     </div>
     
     <script>
+        function navigateToFolder(path) {
+            window.location.href = '/?path=' + encodeURIComponent(path);
+        }
+        
         function playVideo(overlay) {
             const videoContainer = overlay.parentElement;
             const video = videoContainer.querySelector('video');
-            const videoSrc = video.querySelector('source').src;
-            const fileName = videoSrc.split('/').pop(); // Extract just the filename
-            const isUnsupportedFormat = fileName.toLowerCase().endsWith('.mkv') || 
-                                      fileName.toLowerCase().endsWith('.avi') ||
-                                      fileName.toLowerCase().endsWith('.wmv');
-            
-            // For unsupported formats, show message immediately
-            if (isUnsupportedFormat) {
-                showFormatNotSupportedMessage(videoContainer, fileName);
-                return;
-            }
-            
-            // Ensure audio is enabled
-            video.muted = false;
-            video.volume = 1.0;
             
             // Hide the overlay
             overlay.classList.add('hidden');
             
             // Add controls to the video
             video.setAttribute('controls', 'controls');
-            
-            // Set loading timeout for stuck videos
-            const loadingTimeout = setTimeout(function() {
-                console.log('Video loading timeout - likely unsupported format');
-                overlay.classList.remove('hidden');
-                video.removeAttribute('controls');
-                showFormatNotSupportedMessage(videoContainer, fileName);
-            }, 10000); // 10 second timeout
-            
-            // Clear timeout when video starts playing
-            video.addEventListener('loadstart', function() {
-                console.log('Video loading started');
-            });
-            
-            video.addEventListener('loadeddata', function() {
-                console.log('Video data loaded');
-                clearTimeout(loadingTimeout);
-            });
-            
-            video.addEventListener('canplay', function() {
-                console.log('Video can start playing');
-                clearTimeout(loadingTimeout);
-            });
+            video.muted = false;
+            video.volume = 1.0;
             
             // Try to play the video
             const playPromise = video.play();
@@ -485,29 +335,14 @@ const htmlTemplate = `
             if (playPromise !== undefined) {
                 playPromise.then(function() {
                     console.log('Video playback started successfully');
-                    clearTimeout(loadingTimeout);
-                    setupProgressTracking(video, videoContainer);
                 }).catch(function(error) {
                     console.log('Playback failed:', error);
-                    clearTimeout(loadingTimeout);
                     overlay.classList.remove('hidden');
                     video.removeAttribute('controls');
-                    
-                    // Show format not supported message
-                    showFormatNotSupportedMessage(videoContainer, fileName);
                 });
             }
             
-            // Enhanced error handling
-            video.addEventListener('error', function(e) {
-                console.log('Video error:', e);
-                clearTimeout(loadingTimeout);
-                overlay.classList.remove('hidden');
-                video.removeAttribute('controls');
-                showFormatNotSupportedMessage(videoContainer, fileName);
-            });
-            
-            // Listen for when video is paused or ended to show overlay again
+            // Listen for when video is paused or ended
             video.addEventListener('pause', function() {
                 if (video.currentTime === 0 || video.ended) {
                     overlay.classList.remove('hidden');
@@ -521,246 +356,6 @@ const htmlTemplate = `
                 video.currentTime = 0;
             });
         }
-        
-        function showFormatNotSupportedMessage(container, fileName) {
-            // Remove any existing error messages
-            const existingMessages = container.querySelectorAll('.format-error-message');
-            existingMessages.forEach(msg => msg.remove());
-            
-            const errorMsg = document.createElement('div');
-            errorMsg.className = 'format-error-message';
-            errorMsg.style.cssText = 
-                'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);' +
-                'background: rgba(255, 165, 0, 0.95); color: white; padding: 20px;' +
-                'border-radius: 12px; text-align: center; z-index: 1000; max-width: 90%;' +
-                'box-shadow: 0 4px 20px rgba(0,0,0,0.3); font-family: Arial, sans-serif;';
-            
-            const isWindows = navigator.platform.indexOf('Win') > -1;
-            
-            // Clean the filename and create proper download URL
-            const cleanFileName = fileName.includes('/') ? fileName.split('/').pop() : fileName;
-            const downloadLink = '/download/' + encodeURIComponent(cleanFileName);
-            
-            console.log('Download link created:', downloadLink); // Debug log
-            
-            errorMsg.innerHTML = 
-                '<div style="font-size: 18px; margin-bottom: 10px;">⚠ Format Not Supported</div>' +
-                '<div style="font-size: 14px; margin-bottom: 15px;">Your browser cannot play this video format directly.</div>' +
-                '<div style="font-size: 12px; margin-bottom: 15px;">' +
-                '<strong>Recommended options:</strong><br>' +
-                '• Download and use VLC Media Player<br>' +
-                '• Try a different browser (Chrome/Firefox)<br>' +
-                (isWindows ? '• Use Windows Media Player<br>' : '') +
-                '</div>' +
-                '<a href="' + downloadLink + '" style="background: #4CAF50; color: white; padding: 8px 16px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 5px;">📥 Download Video</a>';
-            
-            container.appendChild(errorMsg);
-            
-            // Auto-remove message after 15 seconds
-            setTimeout(function() {
-                if (errorMsg.parentNode) {
-                    errorMsg.parentNode.removeChild(errorMsg);
-                }
-            }, 15000);
-        }
-        
-        function setupProgressTracking(video, container) {
-            const progressOverlay = container.querySelector('.video-progress-overlay');
-            const progressBar = container.querySelector('.video-progress-bar');
-            const scrubberHandle = container.querySelector('.video-scrubber-handle');
-            const timeTooltip = container.querySelector('.video-time-tooltip');
-            
-            if (!progressOverlay || !progressBar || !scrubberHandle) return;
-            
-            let isDragging = false;
-            let dragStartX = 0;
-            let dragStartTime = 0;
-            
-            // Format time for display
-            function formatTime(seconds) {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return mins + ':' + (secs < 10 ? '0' : '') + secs;
-            }
-            
-            // Update progress bar and handle position
-            function updateProgress() {
-                if (video.duration && !isDragging) {
-                    const progress = (video.currentTime / video.duration) * 100;
-                    progressBar.style.width = progress + '%';
-                }
-            }
-            
-            // Set video time based on progress percentage
-            function setVideoTime(percentage) {
-                if (video.duration) {
-                    const newTime = (percentage / 100) * video.duration;
-                    video.currentTime = newTime;
-                    const progress = percentage;
-                    progressBar.style.width = progress + '%';
-                }
-            }
-            
-            // Get percentage from mouse position
-            function getPercentageFromMouse(event) {
-                const rect = progressOverlay.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
-                return percentage;
-            }
-            
-            // Update tooltip with time
-            function updateTooltip(event, percentage) {
-                if (video.duration && timeTooltip) {
-                    const time = (percentage / 100) * video.duration;
-                    timeTooltip.textContent = formatTime(time);
-                    timeTooltip.classList.add('visible');
-                    
-                    // Position tooltip at mouse
-                    const rect = progressOverlay.getBoundingClientRect();
-                    const x = event.clientX - rect.left;
-                    timeTooltip.style.left = x + 'px';
-                    timeTooltip.style.transform = 'translateX(-50%)';
-                }
-            }
-            
-            // Mouse down on scrubber handle
-            scrubberHandle.addEventListener('mousedown', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                isDragging = true;
-                dragStartX = e.clientX;
-                dragStartTime = video.currentTime;
-                scrubberHandle.classList.add('dragging');
-                document.body.style.userSelect = 'none';
-            });
-            
-            // Mouse down on progress bar (direct seeking)
-            progressOverlay.addEventListener('mousedown', function(e) {
-                if (e.target === scrubberHandle) return;
-                
-                const percentage = getPercentageFromMouse(e);
-                setVideoTime(percentage);
-                updateTooltip(e, percentage);
-            });
-            
-            // Mouse move for dragging and tooltip
-            progressOverlay.addEventListener('mousemove', function(e) {
-                const percentage = getPercentageFromMouse(e);
-                updateTooltip(e, percentage);
-                
-                if (isDragging) {
-                    setVideoTime(percentage);
-                }
-            });
-            
-            // Mouse leave - hide tooltip
-            progressOverlay.addEventListener('mouseleave', function() {
-                if (timeTooltip) {
-                    timeTooltip.classList.remove('visible');
-                }
-            });
-            
-            // Global mouse move for dragging
-            document.addEventListener('mousemove', function(e) {
-                if (isDragging) {
-                    const rect = progressOverlay.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
-                    setVideoTime(percentage);
-                }
-            });
-            
-            // Global mouse up - stop dragging
-            document.addEventListener('mouseup', function() {
-                if (isDragging) {
-                    isDragging = false;
-                    scrubberHandle.classList.remove('dragging');
-                    document.body.style.userSelect = '';
-                    if (timeTooltip) {
-                        timeTooltip.classList.remove('visible');
-                    }
-                }
-            });
-            
-            // Update progress during playback
-            video.addEventListener('timeupdate', updateProgress);
-            
-            // Show/hide progress overlay
-            video.addEventListener('play', function() {
-                progressOverlay.classList.add('visible');
-            });
-            
-            video.addEventListener('pause', function() {
-                progressOverlay.classList.remove('visible');
-            });
-            
-            video.addEventListener('ended', function() {
-                progressOverlay.classList.remove('visible');
-                progressBar.style.width = '0%';
-            });
-            
-            // Enhanced controls visibility on hover
-            let controlsTimer;
-            container.addEventListener('mouseenter', function() {
-                clearTimeout(controlsTimer);
-                progressOverlay.classList.add('visible');
-                video.setAttribute('controls', 'controls');
-            });
-            
-            container.addEventListener('mouseleave', function() {
-                if (!video.paused && !isDragging) {
-                    controlsTimer = setTimeout(function() {
-                        progressOverlay.classList.remove('visible');
-                    }, 2000);
-                }
-            });
-        }
-        
-        // Global styles for better video control visibility
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add global styles for video controls
-            const style = document.createElement('style');
-            style.textContent = 
-                'video::-webkit-media-controls-timeline {' +
-                    'background: rgba(255, 255, 255, 0.4) !important;' +
-                    'height: 10px !important;' +
-                    'border-radius: 5px !important;' +
-                '}' +
-                'video::-webkit-media-controls-timeline::-webkit-slider-thumb {' +
-                    'background: #667eea !important;' +
-                    'border-radius: 50% !important;' +
-                    'width: 18px !important;' +
-                    'height: 18px !important;' +
-                '}' +
-                'video::-webkit-media-controls-panel {' +
-                    'background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent) !important;' +
-                    'height: 60px !important;' +
-                '}';
-            document.head.appendChild(style);
-        });
-        
-        // Optional: Add keyboard support for play buttons
-        document.addEventListener('keydown', function(e) {
-            if (e.code === 'Space') {
-                const activeElement = document.activeElement;
-                if (activeElement.classList.contains('play-overlay')) {
-                    e.preventDefault();
-                    playVideo(activeElement);
-                }
-            }
-        });
-        
-        // Add global audio context unlock for mobile browsers
-        document.addEventListener('DOMContentLoaded', function() {
-            // This helps with audio playback on mobile devices
-            document.addEventListener('touchstart', function() {
-                const videos = document.querySelectorAll('video');
-                videos.forEach(video => {
-                    video.load(); // Reload video to ensure audio context
-                });
-            }, { once: true });
-        });
     </script>
 </body>
 </html>
@@ -785,7 +380,7 @@ func getMimeType(filename string) string {
     case ".flv":
         return "video/x-flv"
     case ".mkv":
-        return "video/x-matroska" // Use proper MKV MIME type
+        return "video/x-matroska"
     case ".m4v":
         return "video/mp4"
     case ".3gp":
@@ -793,7 +388,7 @@ func getMimeType(filename string) string {
     case ".ts":
         return "video/mp2t"
     default:
-        return "video/mp4" // Default fallback
+        return "video/mp4"
     }
 }
 
@@ -823,46 +418,112 @@ func formatFileSize(size int64) string {
     return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
 }
 
-// Scan directory for video files
-func getVideoFiles() ([]VideoInfo, error) {
+// Validate path is within base directory (security check)
+func isValidPath(requestedPath string) bool {
+    // Clean the path to resolve any .. or . components
+    cleanPath := filepath.Clean(requestedPath)
+    
+    // Get absolute paths for comparison
+    absBase, err := filepath.Abs(baseVideoDir)
+    if err != nil {
+        return false
+    }
+    
+    absRequested, err := filepath.Abs(cleanPath)
+    if err != nil {
+        return false
+    }
+    
+    // Check if requested path is within the base directory
+    rel, err := filepath.Rel(absBase, absRequested)
+    if err != nil {
+        return false
+    }
+    
+    // Path is valid if it doesn't start with .. (meaning it's not outside base)
+    return !strings.HasPrefix(rel, "..")
+}
+
+// Get directory contents (folders and videos)
+func getDirectoryContents(dirPath string) ([]FolderInfo, []VideoInfo, error) {
+    var folders []FolderInfo
     var videos []VideoInfo
     
-    err := filepath.WalkDir(videoDir, func(path string, d fs.DirEntry, err error) error {
-        if err != nil {
-            return nil // Skip files that can't be accessed
-        }
-        
-        if !d.IsDir() && isVideoFile(d.Name()) {
-            info, err := d.Info()
+    // Validate path
+    if !isValidPath(dirPath) {
+        return folders, videos, fmt.Errorf("invalid path: outside base directory")
+    }
+    
+    entries, err := os.ReadDir(dirPath)
+    if err != nil {
+        return folders, videos, err
+    }
+    
+    for _, entry := range entries {
+        if entry.IsDir() {
+            // Add folder
+            folders = append(folders, FolderInfo{
+                Name: entry.Name(),
+                Path: filepath.Join(dirPath, entry.Name()),
+            })
+        } else if isVideoFile(entry.Name()) {
+            // Add video file
+            info, err := entry.Info()
             if err != nil {
-                return nil // Skip files that can't be accessed
+                continue // Skip files that can't be accessed
             }
             
-            video := VideoInfo{
-                Name:     d.Name(),
-                Path:     path,
+            videos = append(videos, VideoInfo{
+                Name:     entry.Name(),
+                Path:     filepath.Join(dirPath, entry.Name()),
                 Size:     info.Size(),
-                MimeType: getMimeType(d.Name()),
-            }
-            videos = append(videos, video)
+                MimeType: getMimeType(entry.Name()),
+            })
         }
-        return nil
-    })
+    }
     
-    return videos, err
+    return folders, videos, nil
 }
 
 // Home page handler
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-    videos, err := getVideoFiles()
+    // Get the requested path from query parameter
+    requestedPath := r.URL.Query().Get("path")
+    if requestedPath == "" {
+        requestedPath = baseVideoDir
+    }
+    
+    // Validate and get directory contents
+    folders, videos, err := getDirectoryContents(requestedPath)
     if err != nil {
-        log.Printf("Error scanning video directory: %v", err)
-        videos = []VideoInfo{} // Show empty gallery on error
+        log.Printf("Error reading directory %s: %v", requestedPath, err)
+        // Fall back to base directory
+        requestedPath = baseVideoDir
+        folders, videos, _ = getDirectoryContents(requestedPath)
+    }
+    
+    // Calculate parent path for breadcrumb
+    var parentPath string
+    if requestedPath != baseVideoDir {
+        parentPath = filepath.Dir(requestedPath)
+        // Don't allow going above base directory
+        if !isValidPath(parentPath) {
+            parentPath = ""
+        }
+    }
+    
+    // Get relative path for display
+    relPath, err := filepath.Rel(baseVideoDir, requestedPath)
+    if err != nil || relPath == "." {
+        relPath = "Root"
     }
     
     data := PageData{
-        Title:  "Video Gallery",
-        Videos: videos,
+        Title:       "Video Gallery",
+        CurrentPath: relPath,
+        ParentPath:  parentPath,
+        Folders:     folders,
+        Videos:      videos,
     }
     
     // Create template with custom functions
@@ -878,21 +539,29 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 // Video streaming handler
 func videoHandler(w http.ResponseWriter, r *http.Request) {
-    filename := r.URL.Path[len("/video/"):]
-    if filename == "" {
-        http.Error(w, "Video not specified", http.StatusBadRequest)
+    videoPath := r.URL.Query().Get("path")
+    if videoPath == "" {
+        http.Error(w, "Video path not specified", http.StatusBadRequest)
         return
     }
     
-    videoPath := filepath.Join(videoDir, filename)
+    // Validate path
+    if !isValidPath(videoPath) {
+        http.Error(w, "Invalid video path", http.StatusBadRequest)
+        return
+    }
     
-    // Set appropriate headers for video streaming with audio support
-    mimeType := getMimeType(filename)
+    // Check if file exists
+    if _, err := os.Stat(videoPath); os.IsNotExist(err) {
+        http.Error(w, "Video not found", http.StatusNotFound)
+        return
+    }
+    
+    // Set appropriate headers for video streaming
+    mimeType := getMimeType(filepath.Base(videoPath))
     w.Header().Set("Content-Type", mimeType)
     w.Header().Set("Accept-Ranges", "bytes")
-    w.Header().Set("Cache-Control", "public, max-age=3600") // Allow caching for better performance
-    
-    // Add CORS headers for better browser compatibility
+    w.Header().Set("Cache-Control", "public, max-age=3600")
     w.Header().Set("Access-Control-Allow-Origin", "*")
     w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
     w.Header().Set("Access-Control-Allow-Headers", "Range")
@@ -902,30 +571,25 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
 
 // Download handler
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
-    encodedFilename := r.URL.Path[len("/download/"):]
-    if encodedFilename == "" {
-        http.Error(w, "File not specified", http.StatusBadRequest)
+    videoPath := r.URL.Query().Get("path")
+    if videoPath == "" {
+        http.Error(w, "File path not specified", http.StatusBadRequest)
         return
     }
     
-    // Decode the URL-encoded filename
-    filename, err := url.QueryUnescape(encodedFilename)
-    if err != nil {
-        log.Printf("Error decoding filename '%s': %v", encodedFilename, err)
-        // Try with the original filename if decoding fails
-        filename = encodedFilename
+    // Validate path
+    if !isValidPath(videoPath) {
+        http.Error(w, "Invalid file path", http.StatusBadRequest)
+        return
     }
-    
-    log.Printf("Download request - Original: '%s', Decoded: '%s'", encodedFilename, filename)
-    
-    videoPath := filepath.Join(videoDir, filename)
     
     // Check if file exists
     if _, err := os.Stat(videoPath); os.IsNotExist(err) {
-        log.Printf("File not found: %s", videoPath)
         http.Error(w, "File not found", http.StatusNotFound)
         return
     }
+    
+    filename := filepath.Base(videoPath)
     
     // Set headers for download
     w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
@@ -937,11 +601,11 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
     // Set up routes
     http.HandleFunc("/", homeHandler)
-    http.HandleFunc("/video/", videoHandler)
-    http.HandleFunc("/download/", downloadHandler)
+    http.HandleFunc("/video", videoHandler)
+    http.HandleFunc("/download", downloadHandler)
     
     fmt.Printf("🎬 Video Gallery Server starting...\n")
-    fmt.Printf("📁 Serving videos from: %s\n", videoDir)
+    fmt.Printf("📁 Base directory: %s\n", baseVideoDir)
     fmt.Printf("🌐 Open your browser to: http://localhost:8080\n")
     fmt.Printf("⏹️  Press Ctrl+C to stop the server\n\n")
     
