@@ -1,16 +1,23 @@
 package main
 
 import (
+    "context"
     "fmt"
     "html/template"
     "log"
     "net/http"
     "os"
+    "os/signal"
     "path/filepath"
     "strings"
+    "syscall"
+    "time"
 )
 
 const baseVideoDir = `D:\Next New HDD\PrepperOS-Data-Master`
+
+// Global shutdown channel
+var shutdownChan = make(chan bool, 1)
 
 type PageData struct {
     Title       string
@@ -41,6 +48,58 @@ const htmlTemplate = `
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <style>
+        :root {
+            /* Dark Theme (Default) */
+            --bg-gradient-1: #1e3c72;
+            --bg-gradient-2: #2a5298;
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --text-color: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.8);
+            --card-bg: rgba(255, 255, 255, 0.15);
+            --card-border: rgba(255, 255, 255, 0.2);
+            --folder-bg: rgba(255, 193, 7, 0.2);
+            --folder-border: rgba(255, 193, 7, 0.4);
+            --accent-color: #81c784;
+            --warning-color: #ffeb3b;
+            --overlay-bg: rgba(0, 0, 0, 0.6);
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="light"] {
+            --bg-gradient-1: #f5f7fa;
+            --bg-gradient-2: #c3cfe2;
+            --primary-color: #3f51b5;
+            --secondary-color: #9c27b0;
+            --text-color: #2c3e50;
+            --text-secondary: rgba(44, 62, 80, 0.7);
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --card-border: rgba(0, 0, 0, 0.1);
+            --folder-bg: rgba(255, 193, 7, 0.3);
+            --folder-border: rgba(255, 152, 0, 0.5);
+            --accent-color: #4caf50;
+            --warning-color: #ff9800;
+            --overlay-bg: rgba(255, 255, 255, 0.8);
+            --shadow-color: rgba(0, 0, 0, 0.15);
+        }
+
+        [data-theme="nuclear"] {
+            --bg-gradient-1: #0a0a0a;
+            --bg-gradient-2: #1a1a2e;
+            --primary-color: #39ff14;
+            --secondary-color: #ff073a;
+            --text-color: #39ff14;
+            --text-secondary: rgba(57, 255, 20, 0.8);
+            --card-bg: rgba(57, 255, 20, 0.1);
+            --card-border: rgba(255, 7, 58, 0.3);
+            --folder-bg: rgba(255, 255, 0, 0.15);
+            --folder-border: rgba(255, 215, 0, 0.6);
+            --accent-color: #ff073a;
+            --warning-color: #ffff00;
+            --overlay-bg: rgba(0, 0, 0, 0.8);
+            --shadow-color: rgba(57, 255, 20, 0.2);
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -49,48 +108,158 @@ const htmlTemplate = `
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
+            background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
+            color: var(--text-color);
             min-height: 100vh;
             padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .theme-switcher {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 15px;
+            padding: 10px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px var(--shadow-color);
+        }
+
+        .stop-server {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: linear-gradient(45deg, #ff4444, #cc0000);
+            border: 2px solid #ff0000;
+            border-radius: 15px;
+            padding: 12px 16px;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
+        }
+
+        .stop-server:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(255, 0, 0, 0.5);
+            background: linear-gradient(45deg, #ff6666, #ff0000);
+        }
+
+        .stop-server:active {
+            transform: scale(0.95);
+        }
+
+        [data-theme="nuclear"] .stop-server {
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3), 0 0 20px var(--secondary-color);
+            animation: dangerPulse 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes dangerPulse {
+            from { box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3), 0 0 20px var(--secondary-color); }
+            to { box-shadow: 0 6px 20px rgba(255, 0, 0, 0.6), 0 0 30px var(--secondary-color); }
+        }
+
+        .theme-button {
+            background: none;
+            border: 2px solid var(--card-border);
+            border-radius: 10px;
+            padding: 8px 12px;
+            margin: 2px;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .theme-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 10px var(--shadow-color);
+        }
+
+        .theme-button.active {
+            background: var(--primary-color);
+            border-color: var(--secondary-color);
+            color: white;
+            box-shadow: 0 0 15px var(--primary-color);
+        }
+
+        [data-theme="nuclear"] .theme-button {
+            text-shadow: 0 0 5px var(--text-color);
+        }
+
+        [data-theme="nuclear"] .theme-button.active {
+            background: var(--secondary-color);
+            box-shadow: 0 0 20px var(--secondary-color);
+            animation: nuclearGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes nuclearGlow {
+            from { box-shadow: 0 0 20px var(--secondary-color); }
+            to { box-shadow: 0 0 30px var(--primary-color), 0 0 40px var(--secondary-color); }
         }
         
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            margin-top: 80px; /* Space for theme switcher */
         }
         
         .header {
             text-align: center;
             margin-bottom: 40px;
             padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--card-bg);
             border-radius: 15px;
             backdrop-filter: blur(10px);
+            border: 1px solid var(--card-border);
         }
         
         .header h1 {
             font-size: 3rem;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            text-shadow: 2px 2px 4px var(--shadow-color);
+        }
+
+        [data-theme="nuclear"] .header h1 {
+            text-shadow: 0 0 10px var(--primary-color);
+            animation: nuclearTitle 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes nuclearTitle {
+            from { text-shadow: 0 0 10px var(--primary-color); }
+            to { text-shadow: 0 0 20px var(--primary-color), 0 0 30px var(--secondary-color); }
         }
         
         .breadcrumb {
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--card-bg);
             padding: 15px 20px;
             border-radius: 10px;
             margin-bottom: 20px;
             font-size: 1.1rem;
+            border: 1px solid var(--card-border);
         }
         
         .breadcrumb a {
-            color: #81c784;
+            color: var(--accent-color);
             text-decoration: none;
             margin-right: 5px;
         }
         
         .breadcrumb a:hover {
             text-decoration: underline;
+        }
+
+        [data-theme="nuclear"] .breadcrumb a {
+            text-shadow: 0 0 5px var(--accent-color);
         }
         
         .content-grid {
@@ -101,30 +270,44 @@ const htmlTemplate = `
         }
         
         .folder-card, .video-card {
-            background: rgba(255, 255, 255, 0.15);
+            background: var(--card-bg);
             border-radius: 20px;
             padding: 20px;
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid var(--card-border);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             cursor: pointer;
         }
         
         .folder-card:hover, .video-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 15px 40px var(--shadow-color);
+        }
+
+        [data-theme="nuclear"] .folder-card:hover,
+        [data-theme="nuclear"] .video-card:hover {
+            box-shadow: 0 15px 40px var(--shadow-color), 0 0 20px var(--primary-color);
         }
         
         .folder-card {
             text-align: center;
-            background: rgba(255, 193, 7, 0.2);
-            border-color: rgba(255, 193, 7, 0.4);
+            background: var(--folder-bg);
+            border-color: var(--folder-border);
+        }
+
+        [data-theme="nuclear"] .folder-card {
+            box-shadow: inset 0 0 10px var(--folder-border);
         }
         
         .folder-icon {
             font-size: 4rem;
             margin-bottom: 15px;
             display: block;
+        }
+
+        [data-theme="nuclear"] .folder-icon {
+            text-shadow: 0 0 10px var(--warning-color);
+            filter: drop-shadow(0 0 5px var(--warning-color));
         }
         
         .folder-name {
@@ -134,7 +317,7 @@ const htmlTemplate = `
         }
         
         .video-card h3 {
-            color: #fff;
+            color: var(--text-color);
             margin-bottom: 15px;
             font-size: 1.3rem;
             word-break: break-word;
@@ -158,7 +341,7 @@ const htmlTemplate = `
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: var(--overlay-bg);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -180,20 +363,28 @@ const htmlTemplate = `
         .play-button {
             width: 80px;
             height: 80px;
-            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(45deg, var(--primary-color) 0%, var(--secondary-color) 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             border: 4px solid rgba(255, 255, 255, 0.3);
             transition: all 0.3s ease;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 25px var(--shadow-color);
         }
         
         .play-button:hover {
             transform: scale(1.1);
             border-color: rgba(255, 255, 255, 0.6);
-            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 12px 35px var(--shadow-color);
+        }
+
+        [data-theme="nuclear"] .play-button {
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 15px var(--primary-color);
+        }
+
+        [data-theme="nuclear"] .play-button:hover {
+            box-shadow: 0 12px 35px var(--shadow-color), 0 0 25px var(--primary-color);
         }
         
         .play-icon {
@@ -214,7 +405,7 @@ const htmlTemplate = `
         }
         
         .download-btn {
-            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(45deg, var(--primary-color) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 8px 16px;
             border: none;
@@ -228,24 +419,37 @@ const htmlTemplate = `
         .download-btn:hover {
             transform: scale(1.05);
         }
+
+        [data-theme="nuclear"] .download-btn {
+            box-shadow: 0 0 10px var(--primary-color);
+        }
         
         .no-content {
             text-align: center;
             padding: 60px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--card-bg);
             border-radius: 15px;
             margin-top: 40px;
+            border: 1px solid var(--card-border);
         }
         
         .no-content h2 {
             font-size: 2rem;
             margin-bottom: 15px;
-            color: #ffeb3b;
+            color: var(--warning-color);
+        }
+
+        [data-theme="nuclear"] .no-content h2 {
+            text-shadow: 0 0 10px var(--warning-color);
         }
         
         .file-size {
-            color: #81c784;
+            color: var(--accent-color);
             font-weight: bold;
+        }
+
+        [data-theme="nuclear"] .file-size {
+            text-shadow: 0 0 5px var(--accent-color);
         }
         
         @media (max-width: 768px) {
@@ -256,10 +460,46 @@ const htmlTemplate = `
             .header h1 {
                 font-size: 2rem;
             }
+
+            .theme-switcher {
+                position: relative;
+                top: 0;
+                left: 0;
+                margin-bottom: 20px;
+                text-align: center;
+            }
+
+            .container {
+                margin-top: 20px;
+            }
+        }
+
+        /* Nuclear theme specific animations */
+        [data-theme="nuclear"] {
+            animation: nuclearFlicker 0.1s infinite alternate;
+        }
+
+        @keyframes nuclearFlicker {
+            0% { filter: brightness(1); }
+            100% { filter: brightness(1.02); }
+        }
+
+        [data-theme="nuclear"] .card-bg,
+        [data-theme="nuclear"] .folder-card,
+        [data-theme="nuclear"] .video-card {
+            box-shadow: inset 0 0 5px var(--card-border);
         }
     </style>
 </head>
-<body>
+<body data-theme="dark">
+    <div class="theme-switcher">
+        <button class="theme-button active" onclick="setTheme('dark')" data-theme="dark">🌙 Dark</button>
+        <button class="theme-button" onclick="setTheme('light')" data-theme="light">☀️ Light</button>
+        <button class="theme-button" onclick="setTheme('nuclear')" data-theme="nuclear">☢️ Nuclear</button>
+    </div>
+
+    <button class="stop-server" onclick="stopServer()">🛑 Stop Server</button>
+
     <div class="container">
         <div class="header">
             <h1>🎬 {{.Title}}</h1>
@@ -313,6 +553,39 @@ const htmlTemplate = `
     </div>
     
     <script>
+        // Theme management
+        function setTheme(theme) {
+            document.body.setAttribute('data-theme', theme);
+            localStorage.setItem('preferred-theme', theme);
+            
+            // Update active button
+            document.querySelectorAll('.theme-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector('[data-theme="' + theme + '"]').classList.add('active');
+        }
+
+        // Load saved theme on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('preferred-theme') || 'dark';
+            setTheme(savedTheme);
+        });
+
+        function stopServer() {
+            if (confirm('Are you sure you want to stop the server? This will close the application.')) {
+                fetch('/shutdown', { method: 'POST' })
+                    .then(() => {
+                        alert('Server is shutting down...');
+                        window.close();
+                    })
+                    .catch(err => {
+                        console.log('Server stopped:', err);
+                        alert('Server has been stopped.');
+                        window.close();
+                    });
+            }
+        }
+
         function navigateToFolder(path) {
             window.location.href = '/?path=' + encodeURIComponent(path);
         }
@@ -569,6 +842,29 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
     http.ServeFile(w, r, videoPath)
 }
 
+// Shutdown handler
+func shutdownHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != "POST" {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"message": "Server shutting down..."}`))
+    
+    log.Println("🛑 Server shutdown requested via web interface")
+    
+    // Signal shutdown through channel
+    go func() {
+        time.Sleep(500 * time.Millisecond) // Give response time to be sent
+        select {
+        case shutdownChan <- true:
+        default:
+        }
+    }()
+}
+
 // Download handler
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
     videoPath := r.URL.Query().Get("path")
@@ -603,11 +899,45 @@ func main() {
     http.HandleFunc("/", homeHandler)
     http.HandleFunc("/video", videoHandler)
     http.HandleFunc("/download", downloadHandler)
+    http.HandleFunc("/shutdown", shutdownHandler)
     
-    fmt.Printf("🎬 Video Gallery Server starting...\n")
-    fmt.Printf("📁 Base directory: %s\n", baseVideoDir)
-    fmt.Printf("🌐 Open your browser to: http://localhost:8080\n")
-    fmt.Printf("⏹️  Press Ctrl+C to stop the server\n\n")
+    // Create server
+    server := &http.Server{
+        Addr: ":8080",
+    }
     
-    log.Fatal(http.ListenAndServe(":8080", nil))
+    // Channel to listen for interrupt signal
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+    
+    // Start server in a goroutine
+    go func() {
+        fmt.Printf("🎬 Video Gallery Server starting...\n")
+        fmt.Printf("📁 Base directory: %s\n", baseVideoDir)
+        fmt.Printf("🌐 Open your browser to: http://localhost:8080\n")
+        fmt.Printf("⏹️  Press Ctrl+C or use the Stop Server button to stop\n\n")
+        
+        if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatal("Server failed to start:", err)
+        }
+    }()
+    
+    // Wait for interrupt signal or shutdown request
+    select {
+    case <-quit:
+        log.Println("🛑 Shutting down server (Ctrl+C)...")
+    case <-shutdownChan:
+        log.Println("🛑 Shutting down server (Web interface)...")
+    }
+    
+    // Create context with timeout for graceful shutdown
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    // Attempt graceful shutdown
+    if err := server.Shutdown(ctx); err != nil {
+        log.Printf("❌ Server forced to shutdown: %v", err)
+    } else {
+        log.Println("✅ Server gracefully stopped")
+    }
 }
